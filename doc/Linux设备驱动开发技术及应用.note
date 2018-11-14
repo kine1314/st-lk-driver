@@ -1,0 +1,107 @@
+二：
+linux内核的功能：处理器管理，进程管理，内存管理，文件系统管理，设备控制，网络管理
+五：
+内存池：
+内存池(memory pool)是linux 2.6的一个新特性。内核中有些地方的内存分配是不允许失败的。为了确保这种情况下的成功分配，内核开发者建立了一种称为内存池的抽象。内存池其实就是某种形式的后备高速缓存，它试图始终保存空闲的内存，以便在紧急状态下使用。下边是内存池对象的类型：
+typedef struct mempool_s {
+	spinlock_t lock;        /*用来保护对象字段的自旋锁*/
+	int min_nr;		/*内存池中元素的最大个数*/
+	int curr_nr;		/*当前内存池中元素的个数*/
+	void **elements;        /*指向一个数组的指针，该数组由指向保留元素的指针组成*/
+
+
+	void *pool_data;        /*池的拥有者可获得的私有数据*/
+	mempool_alloc_t *alloc; /*分配一个元素的方法*/
+	mempool_free_t *free;   /*释放一个元素的方法*/
+	wait_queue_head_t wait; /*当内存池为空时使用的等待队列*/
+} mempool_t;
+七：
+模块的使用次数：
+try_module_get(THIS_MODULE);
+module_put(THIS_MODULE);
+输入输出控件竞争处理函数：/proc/ioport
+check_region
+request_region
+release_region
+输入输出内存空间的竞争处理函数:/proc/iomem
+check_mem_region
+request_mem_region
+release_mem_region 	
+十二：
+@中断的禁止与消除：
+SA_INTERRUPT:防止中断处理程序处理中，发生其他中断;先处理包含SA_INTERRUPT标志的中断，再处理其他中断，所以也称快速中断;
+disale_irq();禁止中断发生;用在不想用快速中断，又不想其他中断发生的情况;
+enable_irq();允许中断发生;
+
+@顺序锁（seqlock）:
+顺序锁也是对读写锁的一种优化，对于顺序锁，读者绝不会被写者阻塞，也就说，读者可以在写者对被顺序锁保护的共享资源进行写操作时仍然可以继续读， 而不必等待写者完成写操作，写者也不需要等待所有读者完成读操作才去进行写操作。但是，写者与写者之间仍然是互斥的，即如果有写者在进行写操作，其他写者 必须自旋在那里，直到写者释放了顺序锁;
+这种锁有一个限制，它必须要求被保护的共享资源不含有指针，因为写者可能使得指针失效，但读者如果正要访问该指针，将导致OOPs。
+如果读者在读操作期间，写者已经发生了写操作，那么，读者必须重新读取数据，以便确保得到的数据是完整的。
+这种锁对于读写同时进行的概率比较小的情况，性能是非常好的，而且它允许读写同时进行，因而更大地提高了并发性。
+@void write_seqlock(seqlock_t *sl);
+写者在访问被顺序锁s1保护的共享资源前需要调用该函数来获得顺序锁s1。它实际功能上等同于spin_lock，只是增加了一个对顺序锁顺序号的加1操作，以便读者能够检查出是否在读期间有写者访问过。
+@void write_sequnlock(seqlock_t *sl);
+写者在访问完被顺序锁s1保护的共享资源后需要调用该函数来释放顺序锁s1。它实际功能上等同于spin_unlock，只是增加了一个对顺序锁顺序号的加1操作，以便读者能够检查出是否在读期间有写者访问过。
+@int write_tryseqlock(seqlock_t *sl);
+写者在访问被顺序锁s1保护的共享资源前也可以调用该函数来获得顺序锁s1。它实际功能上等同于spin_trylock，只是如果成功获得锁后，该函数增加了一个对顺序锁顺序号的加1操作，以便读者能够检查出是否在读期间有写者访问过。
+@unsigned read_seqbegin(const seqlock_t *sl);
+读者在对被顺序锁s1保护的共享资源进行访问前需要调用该函数。读者实际没有任何得到锁和释放锁的开销，该函数只是返回顺序锁s1的当前顺序号。
+@int read_seqretry(const seqlock_t *sl, unsigned iv);
+读者在访问完被顺序锁s1保护的共享资源后需要调用该函数来检查，在读访问期间是否有写者访问了该共享资源，如果是，读者就需要重新进行读操作，否则，读者成功完成了读操作。
+因此，读者使用顺序锁的模式如下：
+do {
+seqnum = read_seqbegin(&seqlock_a);
+//读操作代 块
+...
+} while (read_seqretry(&seqlock_a, seqnum));
+write_seqlock_irqsave(lock, flags)
+
+
+十七：
+/proc文件系统
+read_proc,write_proc应用程序读取生成的proc文件的时候，指定的函数地址，每次读写都重新调用；
+
+十八：物理地址与虚拟地址
+ioremap，ioremap_nocache:把物理地址转换虚拟地址
+iounmap，删除虚拟地址
+PCI设备有两种空间：prefechable用ioremap，no-prefechable用ioremap_nocache;
+remap_page_range：把物理地址转换虚拟地址
+
+二十：抢占cpu
+preempt_enbale(): 减少抢占count
+preempy_disable（）;增加抢占count
+get_cpu():smp_processor_id+preempy_disable
+put_cpu():preempt_enable
+
+
+《Linux设备驱动开发详解》笔记
+在新版本的内核中struct device 已经没有bus_id成员，取而代之的是通过dev_name和dev_set_name对设备的名字进行操作。
+dev_name和dev_set_name在2.6.35.6内核中的源代码如下:
+static inline const char *dev_name(const struct device *dev)
+{
+        /* Use the init name until the kobject becomes available */
+        if (dev->init_name)
+                return dev->init_name;
+
+        return kobject_name(&dev->kobj);
+}
+
+extern int dev_set_name(struct device *dev, const char *name, ...)
+        __attribute__((format(printf, 2, 3)));
+kernel 邮件列表
+中讲了：struct device - replace bus_id with dev_name()，以后只要使用dev->bus_id的时候，改成dev_name(dev)就可以了。
+
+各种总线的驱动框架（i2c，usb，pci，spc，platform）
+
+
+
+
+
+
+
+
+
+
+
+
+
